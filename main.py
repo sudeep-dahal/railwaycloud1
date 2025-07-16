@@ -5,6 +5,10 @@ import os
 import boto3
 from io import StringIO
 from glob import glob
+import functools
+
+# --- Ensure all print logs are flushed immediately for Railway ---
+print = functools.partial(print, flush=True)
 
 # --- Configuration ---
 url = 'http://srv.dofe.gov.np/Services/DofeWebService.svc/GetPrePermissionByLotNo'
@@ -12,7 +16,7 @@ start = 326450
 end = 326400
 max_retries = 3
 batch_size = 5
-file_prefix = "PrePerrmissions"
+file_prefix = "prepermissions"
 merged_filename = "merged_pre_permissions.csv"
 
 # --- S3 Configuration from ENV ---
@@ -22,6 +26,7 @@ AWS_REGION = os.getenv('AWS_REGION')
 S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME')
 S3_FILE_NAME = os.getenv('S3_FILE_NAME', merged_filename)
 
+# --- Setup S3 client ---
 s3_client = boto3.client(
     's3',
     aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -29,7 +34,7 @@ s3_client = boto3.client(
     region_name=AWS_REGION
 )
 
-# --- Fetch Function ---
+# --- Fetch function with retries ---
 async def fetch(session, lot_no):
     for attempt in range(max_retries):
         try:
@@ -47,7 +52,7 @@ async def fetch(session, lot_no):
     print(f"❌ Failed all retries for LotNo {lot_no}")
     return None
 
-# --- File Helpers ---
+# --- Helpers for saving and merging ---
 def get_next_file_index():
     index = 1
     while os.path.exists(f"{file_prefix}{index}.csv"):
@@ -64,12 +69,13 @@ def save_batch_to_csv(data_batch, headers, batch_index):
             writer.writerow(row)
 
 def merge_csv_files(output_filename):
-    print("🔁 Merging CSV files...")
+    print("🔁 Merging all batch CSVs...")
     all_files = sorted(glob(f"{file_prefix}*.csv"))
     combined = {}
     headers = set()
 
     for file in all_files:
+        print(f"📂 Reading {file}")
         with open(file, newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -88,7 +94,7 @@ def merge_csv_files(output_filename):
     return output_filename
 
 def upload_to_s3(filepath, s3_key):
-    print(f"📤 Uploading {filepath} to S3 as {s3_key}")
+    print(f"📤 Uploading {filepath} to S3 bucket {S3_BUCKET_NAME} as {s3_key}")
     with open(filepath, 'rb') as f:
         s3_client.put_object(
             Bucket=S3_BUCKET_NAME,
@@ -96,16 +102,17 @@ def upload_to_s3(filepath, s3_key):
             Body=f,
             ContentType='text/csv'
         )
-    print(f"✅ Upload complete.")
+    print("✅ Upload to S3 completed.")
 
-# --- Main Async Logic ---
+# --- Main runner ---
 async def main():
+    print("🚀 Script started")
     headers = set()
     batch_data = []
     batch_index = get_next_file_index()
 
     async with aiohttp.ClientSession() as session:
-        for lot_no in range(start, end - 1, -1):  # Decrementing
+        for lot_no in range(start, end - 1, -1):
             print(f"📥 Queueing LotNo {lot_no}")
             res = await fetch(session, lot_no)
             if res and 'LotNo' in res:
@@ -119,16 +126,15 @@ async def main():
 
             await asyncio.sleep(1)
 
-        # Final batch
         if batch_data:
             save_batch_to_csv(batch_data, list(headers), batch_index)
 
-    # Merge all batch CSVs
+    # Merge and upload
     merged_file = merge_csv_files(merged_filename)
-
-    # Upload to S3
     upload_to_s3(merged_file, S3_FILE_NAME)
 
-# --- Run the script ---
+    print("🎉 All done!")
+
+# --- Trigger script ---
 if __name__ == '__main__':
     asyncio.run(main())
