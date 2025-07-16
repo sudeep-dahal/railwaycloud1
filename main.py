@@ -12,7 +12,7 @@ start = 326450
 end = 326400
 max_retries = 3
 batch_size = 5
-file_prefix = "prepermissions"
+file_prefix = "PrePerrmissions"
 merged_filename = "merged_pre_permissions.csv"
 
 # --- S3 Configuration from ENV ---
