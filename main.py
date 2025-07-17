@@ -16,8 +16,8 @@ print = functools.partial(print, flush=True)
 
 # --- Config ---
 url = 'http://srv.dofe.gov.np/Services/DofeWebService.svc/GetPrePermissionByLotNo'
-start = 100000
-end = 327284
+start = 327284
+end = 100000
 max_retries = 3
 batch_size = 25000
 file_prefix = "prepermissions"
