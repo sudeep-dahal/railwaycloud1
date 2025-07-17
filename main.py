@@ -16,10 +16,10 @@ print = functools.partial(print, flush=True)
 
 # --- Config ---
 url = 'http://srv.dofe.gov.np/Services/DofeWebService.svc/GetPrePermissionByLotNo'
-start = 326450
-end = 326400
+start = 100000
+end = 327284
 max_retries = 3
-batch_size = 50000
+batch_size = 25000
 file_prefix = "prepermissions"
 merged_filename = "merged_pre_permissions.csv"
 
